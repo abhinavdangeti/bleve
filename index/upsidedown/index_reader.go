@@ -26,6 +26,10 @@ type IndexReader struct {
 	docCount uint64
 }
 
+func (i *IndexReader) SizeInBytes() int {
+	return 24
+}
+
 func (i *IndexReader) TermFieldReader(term []byte, fieldName string, includeFreq, includeNorm, includeTermVectors bool) (index.TermFieldReader, error) {
 	fieldIndex, fieldExists := i.index.fieldCache.FieldNamed(fieldName, false)
 	if fieldExists {

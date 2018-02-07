@@ -35,6 +35,22 @@ type UpsideDownCouchTermFieldReader struct {
 	includeTermVectors bool
 }
 
+func (r *UpsideDownCouchTermFieldReader) SizeInBytes() int {
+	sizeInBytes := 8 /* count */ +
+		16 /* overhead from pointers - indexReader, iterator */ +
+		24 + len(r.term) /* overhead from slice - term */ +
+		8 /* tfrNext */ +
+		r.tfrPrealloc.SizeInBytes() /* tfrPrealloc */ +
+		24 + len(r.keyBuf) /* keyBuf */ +
+		3 /* field, includeTermVectors */
+
+	if r.tfrNext != nil {
+		sizeInBytes += r.tfrNext.SizeInBytes()
+	}
+
+	return sizeInBytes
+}
+
 func newUpsideDownCouchTermFieldReader(indexReader *IndexReader, term []byte, field uint16, includeFreq, includeNorm, includeTermVectors bool) (*UpsideDownCouchTermFieldReader, error) {
 	bufNeeded := termFrequencyRowKeySize(term, nil)
 	if bufNeeded < dictionaryRowKeySize(term) {

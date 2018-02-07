@@ -82,6 +82,8 @@ type IndexReader interface {
 	DumpFields() chan interface{}
 
 	Close() error
+
+	SizeInBytes() int
 }
 
 // FieldTerms contains the terms used by a document, keyed by field
@@ -134,6 +136,22 @@ type TermFieldDoc struct {
 	Vectors []*TermFieldVector
 }
 
+func (tfd *TermFieldDoc) SizeInBytes() int {
+	sizeInBytes := 16 + len(tfd.Term) +
+		24 + len(tfd.ID) +
+		8 +
+		8 +
+		24 + len(tfd.Vectors)*8
+
+	for _, entry := range tfd.Vectors {
+		sizeInBytes += 16 + len(entry.Field) +
+			24 + len(entry.ArrayPositions)*8 +
+			24
+	}
+
+	return sizeInBytes
+}
+
 // Reset allows an already allocated TermFieldDoc to be reused
 func (tfd *TermFieldDoc) Reset() *TermFieldDoc {
 	// remember the []byte used for the ID
@@ -161,6 +179,8 @@ type TermFieldReader interface {
 	// Count returns the number of documents contains the term in this field.
 	Count() uint64
 	Close() error
+
+	SizeInBytes() int
 }
 
 type DictEntry struct {

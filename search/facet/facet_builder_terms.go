@@ -94,3 +94,18 @@ func (fb *TermsFacetBuilder) Result() *search.FacetResult {
 
 	return &rv
 }
+
+func (fb *TermsFacetBuilder) SizeInBytes() int {
+	sizeInBytes := 24 /* size of ints - size, total, missing*/ +
+		len(fb.field) + 16 /* overhead from string - field*/ +
+		8 /* overhead from map - termsCount */ +
+		1 /* size of bool - sawValue */
+
+	// termsCount
+	for k, _ := range fb.termsCount {
+		sizeInBytes += len(k) + 16 /* overhead from string */ +
+			8 /* size of int */
+	}
+
+	return sizeInBytes
+}

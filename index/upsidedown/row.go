@@ -371,6 +371,22 @@ type TermFrequencyRow struct {
 	field   uint16
 }
 
+func (tfr *TermFrequencyRow) SizeInBytes() int {
+	sizeInBytes := 24 + len(tfr.term) +
+		24 + len(tfr.doc) +
+		8 +
+		24 + len(tfr.vectors)*8 +
+		4 +
+		2
+
+	for _, entry := range tfr.vectors {
+		sizeInBytes += 26 /* uint16, uint64s */ +
+			24 + len(entry.arrayPositions)*8
+	}
+
+	return sizeInBytes
+}
+
 func (tfr *TermFrequencyRow) Term() []byte {
 	return tfr.term
 }

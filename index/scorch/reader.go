@@ -23,6 +23,10 @@ type Reader struct {
 	root *IndexSnapshot // Owns 1 ref-count on the index snapshot.
 }
 
+func (r *Reader) SizeInBytes() int {
+	return 0
+}
+
 func (r *Reader) TermFieldReader(term []byte, field string, includeFreq,
 	includeNorm, includeTermVectors bool) (index.TermFieldReader, error) {
 	return r.root.TermFieldReader(term, field, includeFreq, includeNorm, includeTermVectors)

@@ -47,6 +47,12 @@ type Location struct {
 	ArrayPositions ArrayPositions `json:"array_positions"`
 }
 
+func (l *Location) SizeInBytes() int {
+	return 24 /* overhead from uint64s - Pos, Start, End */ +
+		24 /*overhead from slice - ArrayPositions */ +
+		len(l.ArrayPositions)*8 /*size of uint64 */
+}
+
 type Locations []*Location
 
 type TermLocationMap map[string]Locations
@@ -117,6 +123,71 @@ func (dm *DocumentMatch) Reset() *DocumentMatch {
 	return dm
 }
 
+func (dm *DocumentMatch) SizeInBytes() int {
+	sizeInBytes := len(dm.Index) + 16 /* overhead from string - Index */ +
+		len(dm.ID) + 16 /* overhead from string - ID */ +
+		len(dm.IndexInternalID) + 24 /* overhead from slice - IndexInternalID */ +
+		8 /* size of float64 - Score */ +
+		8 /* size of pointer - Expl */ +
+		8 /* overhead from map - Locations */ +
+		8 /* overhead from map - Fragments */ +
+		24 /* overhead from slice - Sort */ +
+		8 /* overhead from map - Fields */ +
+		8 /* size of pointer - Document */ +
+		8 /* size of uint64 - HitNumber */
+
+	// Expl
+	if dm.Expl != nil {
+		sizeInBytes += dm.Expl.SizeInBytes()
+	}
+
+	// Locations
+	for k, v := range dm.Locations {
+		sizeInBytes += len(k) + 16 /* overhead from string */ +
+			8 /* overhead from map */
+
+		for k1, v1 := range v {
+			sizeInBytes += len(k1) + 16 /* overhead from string */ +
+				24 /* overhead from slice */ + len(v1)*8 /* overhead from pointer */
+
+			for _, entry := range v1 {
+				sizeInBytes += entry.SizeInBytes()
+			}
+		}
+	}
+
+	// Fragments
+	for k, v := range dm.Fragments {
+		sizeInBytes += len(k) + 16 /* overhead from string */ +
+			24 /* overhead from slice */
+
+		for _, entry := range v {
+			sizeInBytes += len(entry) + 16 /* overhead from string */
+		}
+	}
+
+	// Sort
+	for _, entry := range dm.Sort {
+		sizeInBytes += len(entry) + 16 /* overhead from string */
+	}
+
+	// Fields
+	for k, _ := range dm.Fields {
+		sizeInBytes += len(k) + 16 /* overhead from string */ +
+			8 /* interface{} */
+	}
+
+	// Document
+	if dm.Document != nil {
+		sizeInBytes += int(dm.Document.NumPlainTextBytes())
+		sizeInBytes += len(dm.Document.ID) + 16 /* overhead from string */ +
+			48 /* overhead from slices */ +
+			len(dm.Document.CompositeFields)*8 /* overhead from pointer */
+	}
+
+	return sizeInBytes
+}
+
 func (dm *DocumentMatch) String() string {
 	return fmt.Sprintf("[%s-%f]", string(dm.IndexInternalID), dm.Score)
 }
@@ -126,6 +197,17 @@ type DocumentMatchCollection []*DocumentMatch
 func (c DocumentMatchCollection) Len() int           { return len(c) }
 func (c DocumentMatchCollection) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (c DocumentMatchCollection) Less(i, j int) bool { return c[i].Score > c[j].Score }
+
+func (c DocumentMatchCollection) SizeInBytes() int {
+	sizeInBytes := 24 /* overhead from slice */
+	for _, entry := range c {
+		sizeInBytes += 8 /* overhead from pointer */
+		if entry != nil {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+	return sizeInBytes
+}
 
 type Searcher interface {
 	Next(ctx *SearchContext) (*DocumentMatch, error)

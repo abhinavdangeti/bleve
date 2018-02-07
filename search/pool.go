@@ -42,17 +42,22 @@ func NewDocumentMatchPool(size, sortsize int) *DocumentMatchPool {
 	startBlock := make([]DocumentMatch, size)
 	startSorts := make([]string, size*sortsize)
 	// make these initial instances available
-	i, j := 0, 0
-	for i < size {
+	j := 0
+	for i := 0; i < size; i++ {
 		avail[i] = &startBlock[i]
 		avail[i].Sort = startSorts[j:j]
-		i += 1
 		j += sortsize
 	}
 	return &DocumentMatchPool{
 		avail:    avail,
 		TooSmall: defaultDocumentMatchPoolTooSmall,
 	}
+}
+
+func (p *DocumentMatchPool) SizeInBytes() int {
+	return p.avail.SizeInBytes() + 8 /* overhead from pointer */ +
+		8 /* TooSmall */ +
+		len(p.avail)*8 + 24*3 /* overhead while setting up DocumentMatchCollection on init */
 }
 
 // Get returns an available DocumentMatch from the pool

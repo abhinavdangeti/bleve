@@ -126,3 +126,25 @@ func (fb *NumericFacetBuilder) Result() *search.FacetResult {
 
 	return &rv
 }
+
+func (fb *NumericFacetBuilder) SizeInBytes() int {
+	sizeInBytes := 24 /* size of ints - size, total, missing*/ +
+		len(fb.field) + 16 /* overhead from string - field*/ +
+		16 /* overhead from map - termsCount, ranges */ +
+		1 /* size of bool - sawValue */
+
+	// termsCount
+	for k, _ := range fb.termsCount {
+		sizeInBytes += len(k) + 16 /* overhead from string */ +
+			8 /* size of int */
+	}
+
+	// ranges
+	for k, _ := range fb.ranges {
+		sizeInBytes += len(k) + 16 /* overhead from string */ +
+			8 /* size of pointer */ +
+			16 /* size of contents of numericRange */
+	}
+
+	return sizeInBytes
+}

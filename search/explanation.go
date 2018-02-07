@@ -32,3 +32,17 @@ func (expl *Explanation) String() string {
 	}
 	return string(js)
 }
+
+func (expl *Explanation) SizeInBytes() int {
+	sizeInBytes := 8 /* size of float64 */ +
+		len(expl.Message) + 16 /* overhead from string */ +
+		len(expl.Children)*8 /* size of pointer */ + 24 /* overhead from slice */
+
+	for _, v := range expl.Children {
+		if v != nil {
+			sizeInBytes += v.SizeInBytes()
+		}
+	}
+
+	return sizeInBytes
+}

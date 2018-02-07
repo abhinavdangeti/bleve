@@ -27,6 +27,8 @@ type FacetBuilder interface {
 
 	Result() *FacetResult
 	Field() string
+
+	SizeInBytes() int
 }
 
 type FacetsBuilder struct {
@@ -67,6 +69,22 @@ func (fb *FacetsBuilder) UpdateVisitor(field string, term []byte) {
 	for _, facetBuilder := range fb.facets {
 		facetBuilder.UpdateVisitor(field, term)
 	}
+}
+
+func (fb *FacetsBuilder) SizeInBytes() int {
+	sizeInBytes := 8 /* overhead from map */ +
+		24 /* overhead from slice */
+
+	for k, v := range fb.facets {
+		sizeInBytes += len(k) + 16 /* overhead from string */ +
+			v.SizeInBytes()
+	}
+
+	for _, entry := range fb.fields {
+		sizeInBytes += len(entry) + 16 /* overhead from string */
+	}
+
+	return sizeInBytes
 }
 
 type TermFacet struct {
@@ -127,6 +145,12 @@ func (nrf *NumericRangeFacet) Same(other *NumericRangeFacet) bool {
 	return true
 }
 
+func (nrf *NumericRangeFacet) SizeInBytes() int {
+	return (len(nrf.Name) + 16 /* overhead from string */ +
+		16 /* size of pointers - Min, Max */ +
+		8 /* size of Count */)
+}
+
 type NumericRangeFacets []*NumericRangeFacet
 
 func (nrf NumericRangeFacets) Add(numericRangeFacet *NumericRangeFacet) NumericRangeFacets {
@@ -148,6 +172,17 @@ func (nrf NumericRangeFacets) Less(i, j int) bool {
 		return nrf[i].Name < nrf[j].Name
 	}
 	return nrf[i].Count > nrf[j].Count
+}
+
+func (nrf NumericRangeFacets) SizeInBytes() int {
+	sizeInBytes := 24 /* overhead from slice */ +
+		len(nrf)*8 /* size of pointers */
+
+	for _, entry := range nrf {
+		sizeInBytes += entry.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 type DateRangeFacet struct {
@@ -180,6 +215,12 @@ func (drf *DateRangeFacet) Same(other *DateRangeFacet) bool {
 	return true
 }
 
+func (drf *DateRangeFacet) SizeInBytes() int {
+	return (len(drf.Name) + 16 /* overhead from string */ +
+		16 /* size of pointers - Start, End */ +
+		8 /* size of int - Count */)
+}
+
 type DateRangeFacets []*DateRangeFacet
 
 func (drf DateRangeFacets) Add(dateRangeFacet *DateRangeFacet) DateRangeFacets {
@@ -201,6 +242,17 @@ func (drf DateRangeFacets) Less(i, j int) bool {
 		return drf[i].Name < drf[j].Name
 	}
 	return drf[i].Count > drf[j].Count
+}
+
+func (drf DateRangeFacets) SizeInBytes() int {
+	sizeInBytes := 24 /* overhead from slice */ +
+		len(drf)*8 /* size of pointers */
+
+	for _, entry := range drf {
+		sizeInBytes += entry.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 type FacetResult struct {

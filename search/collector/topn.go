@@ -19,6 +19,7 @@ import (
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
+	srchr "github.com/blevesearch/bleve/search/searcher"
 	"golang.org/x/net/context"
 )
 
@@ -58,6 +59,38 @@ type TopNCollector struct {
 	cachedDesc    []bool
 
 	lowestMatchOutsideResults *search.DocumentMatch
+
+	Tracker *search.MemTracker
+}
+
+func (hc *TopNCollector) TrackedMemory() uint64 {
+	sizeInBytes := 32 /* size + skip + total + maxScore */ +
+		24 /* took */ +
+		24 /* sort - overhead from slice, + TODO: interface? */ +
+		24 + hc.results.SizeInBytes() /* results - overhead from slice */ +
+		8 /* facetsBuilder - overhead from pointer */ +
+		1 /* needDocIds */ +
+		24 + len(hc.neededFields)*16 /* neededFields, overhead from slice, strings */ +
+		24 + len(hc.cachedScoring)*1 /* cachedScoring, overhead from slice, bool */ +
+		24 + len(hc.cachedDesc)*1 /* cachedDesc, overhead from slice, bool */ +
+		8 /* lowestMatchOutsideResults, overhead from pointer */ +
+		8 /* Tracker, overhead from pointer */
+
+	if hc.facetsBuilder != nil {
+		sizeInBytes += hc.facetsBuilder.SizeInBytes()
+	}
+
+	if hc.lowestMatchOutsideResults != nil {
+		sizeInBytes += hc.lowestMatchOutsideResults.SizeInBytes()
+	}
+
+	// Overhead from SearchResult
+	sizeInBytes += 8 /* overhead from pointer - SearchResult */ +
+		24 + 8 /* overhead from SearchStatus */ +
+		8 /* overhead from pointer - SearchRequest */ +
+		32 /* overhead from Total, MaxScore, Took, Facets (pointer) */
+
+	return uint64(sizeInBytes) + hc.Tracker.Usage()
 }
 
 // CheckDoneEvery controls how frequently we check the context deadline
@@ -95,6 +128,8 @@ func NewTopNCollector(size int, skip int, sort search.SortOrder) *TopNCollector 
 	hc.cachedScoring = sort.CacheIsScore()
 	hc.cachedDesc = sort.CacheDescending()
 
+	hc.Tracker = search.NewMemTracker()
+
 	return hc
 }
 
@@ -111,9 +146,13 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 	if hc.size+hc.skip > PreAllocSizeSkipCap {
 		backingSize = PreAllocSizeSkipCap + 1
 	}
+
 	searchContext := &search.SearchContext{
 		DocumentMatchPool: search.NewDocumentMatchPool(backingSize+searcher.DocumentMatchPoolSize(), len(hc.sort)),
 	}
+
+	hc.Tracker.Add(uint64(8 /* overhead from pointers */ +
+		24 + 8 + searchContext.DocumentMatchPool.SizeInBytes()))
 
 	select {
 	case <-ctx.Done():
@@ -137,6 +176,11 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 
 		next, err = searcher.Next(searchContext)
 	}
+
+	if termsearcher, ok := searcher.(*srchr.TermSearcher); ok {
+		hc.Tracker.Add(uint64(termsearcher.SizeInBytes()))
+	}
+
 	// compute search duration
 	hc.took = time.Since(startTime)
 	if err != nil {
@@ -147,6 +191,7 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

@@ -27,6 +27,18 @@ type TermSearcher struct {
 	tfd         index.TermFieldDoc
 }
 
+func (s *TermSearcher) SizeInBytes() int {
+	sizeInBytes := s.indexReader.SizeInBytes() +
+		s.reader.SizeInBytes() +
+		s.tfd.SizeInBytes()
+
+	if s.scorer != nil {
+		sizeInBytes += s.scorer.SizeInBytes()
+	}
+
+	return sizeInBytes
+}
+
 func NewTermSearcher(indexReader index.IndexReader, term string, field string, boost float64, options search.SearcherOptions) (*TermSearcher, error) {
 	reader, err := indexReader.TermFieldReader([]byte(term), field, true, true, options.IncludeTermVectors)
 	if err != nil {

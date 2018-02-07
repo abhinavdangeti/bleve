@@ -36,6 +36,30 @@ type TermQueryScorer struct {
 	queryWeightExplanation *search.Explanation
 }
 
+func (s *TermQueryScorer) SizeInBytes() int {
+	sizeInBytes := 24 + len(s.queryTerm) +
+		16 + len(s.queryField) +
+		8 +
+		8 +
+		8 +
+		8 +
+		8 + 2 /* SearcherOptions */ +
+		8 +
+		8 +
+		8 +
+		8
+
+	if s.idfExplanation != nil {
+		sizeInBytes += s.idfExplanation.SizeInBytes()
+	}
+
+	if s.queryWeightExplanation != nil {
+		sizeInBytes += s.queryWeightExplanation.SizeInBytes()
+	}
+
+	return sizeInBytes
+}
+
 func NewTermQueryScorer(queryTerm []byte, queryField string, queryBoost float64, docTotal, docTerm uint64, options search.SearcherOptions) *TermQueryScorer {
 	rv := TermQueryScorer{
 		queryTerm:   queryTerm,

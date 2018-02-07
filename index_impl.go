@@ -17,6 +17,7 @@ package bleve
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -363,6 +364,34 @@ func (i *indexImpl) Search(req *SearchRequest) (sr *SearchResult, err error) {
 	return i.SearchInContext(context.Background(), req)
 }
 
+func calculateEstimate(req *SearchRequest, docMatchPoolSize int) int {
+	dm := &search.DocumentMatch{}
+	backingSize := req.Size + req.From + 1
+	if req.Size+req.From > collector.PreAllocSizeSkipCap {
+		backingSize = collector.PreAllocSizeSkipCap + 1
+	}
+
+	// DocumentMatches in the initialized DocumentMatchPool
+	sizeOfDocMatches := (backingSize+docMatchPoolSize)*(dm.SizeInBytes()+8 /* size of pointer */) +
+		24 /* overhead from slice - DocumentMatchPool */
+
+	// Worst case: All document matches are present in the result set
+	sizeOfDocMatches *= 2
+
+	// size + from => number of hits
+	docsOverhead := 0
+	if len(req.Fields) > 0 || req.Highlight != nil {
+		for i := 0; i < (req.Size + req.From); i++ {
+			// Account for overhead from type Document
+			docsOverhead = (req.Size + req.From) *
+				(16 /* overhead from string - ID */ +
+					48 /* overhead from slices - Fields, CompositeFields */)
+		}
+	}
+
+	return (sizeOfDocMatches + docsOverhead)
+}
+
 // SearchInContext executes a search request operation within the provided
 // Context.  Returns a SearchResult object or an error.
 func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr *SearchResult, err error) {
@@ -401,6 +430,8 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 		}
 	}()
 
+	memEstimate := calculateEstimate(req, searcher.DocumentMatchPoolSize())
+
 	if req.Facets != nil {
 		facetsBuilder := search.NewFacetsBuilder(indexReader)
 		for facetName, facetRequest := range req.Facets {
@@ -427,7 +458,11 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 			}
 		}
 		collector.SetFacetsBuilder(facetsBuilder)
+		memEstimate += facetsBuilder.SizeInBytes()
+		//TODO: Account for FacetResults >> size of ranges * sizeof(FacetResult)
 	}
+
+	log.Println("ESTIMATE: ", memEstimate)
 
 	err = collector.Collect(ctx, searcher, indexReader)
 	if err != nil {
@@ -530,6 +565,8 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 		searchDuration > Config.SlowSearchLogThreshold {
 		logger.Printf("slow search took %s - %v", searchDuration, req)
 	}
+
+	log.Println("CALCULATED: ", collector.TrackedMemory())
 
 	return &SearchResult{
 		Status: &SearchStatus{
