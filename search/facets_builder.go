@@ -15,6 +15,7 @@
 package search
 
 import (
+	"reflect"
 	"sort"
 
 	"github.com/blevesearch/bleve/index"
@@ -27,6 +28,19 @@ type FacetBuilder interface {
 
 	Result() *FacetResult
 	Field() string
+
+	SizeInBytes() int
+}
+
+func init() {
+	var fb FacetsBuilder
+	HeapOverhead["FacetsBuilder"] = int(reflect.TypeOf(fb).Size()) + index.SizeOfPointer
+	var nrf NumericRangeFacet
+	HeapOverhead["NumericRangeFacet"] = int(reflect.TypeOf(nrf).Size()) + index.SizeOfPointer
+	var drf DateRangeFacet
+	HeapOverhead["DateRangeFacet"] = int(reflect.TypeOf(drf).Size()) + index.SizeOfPointer
+	var fr FacetResult
+	HeapOverhead["FacetResult"] = int(reflect.TypeOf(fr).Size()) + index.SizeOfPointer
 }
 
 type FacetsBuilder struct {
@@ -67,6 +81,26 @@ func (fb *FacetsBuilder) UpdateVisitor(field string, term []byte) {
 	for _, facetBuilder := range fb.facets {
 		facetBuilder.UpdateVisitor(field, term)
 	}
+}
+
+func (fb *FacetsBuilder) SizeInBytes() int {
+	sizeInBytes := HeapOverhead["FacetsBuilder"]
+
+	// overhead from FacetResults
+	sizeInBytes += index.SizeOfMap +
+		len(fb.facets)*(index.SizeOfString+HeapOverhead["FacetResult"])
+
+	// facets
+	for k, v := range fb.facets {
+		sizeInBytes += len(k) + index.SizeOfString + v.SizeInBytes()
+	}
+
+	// fields
+	for _, entry := range fb.fields {
+		sizeInBytes += len(entry) + index.SizeOfString
+	}
+
+	return sizeInBytes
 }
 
 type TermFacet struct {
@@ -127,6 +161,11 @@ func (nrf *NumericRangeFacet) Same(other *NumericRangeFacet) bool {
 	return true
 }
 
+func (nrf *NumericRangeFacet) SizeInBytes() int {
+	return HeapOverhead["NumericRangeFacet"] +
+		len(nrf.Name)
+}
+
 type NumericRangeFacets []*NumericRangeFacet
 
 func (nrf NumericRangeFacets) Add(numericRangeFacet *NumericRangeFacet) NumericRangeFacets {
@@ -148,6 +187,16 @@ func (nrf NumericRangeFacets) Less(i, j int) bool {
 		return nrf[i].Name < nrf[j].Name
 	}
 	return nrf[i].Count > nrf[j].Count
+}
+
+func (nrf NumericRangeFacets) SizeInBytes() int {
+	sizeInBytes := index.SizeOfSlice
+
+	for _, entry := range nrf {
+		sizeInBytes += entry.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 type DateRangeFacet struct {
@@ -180,6 +229,11 @@ func (drf *DateRangeFacet) Same(other *DateRangeFacet) bool {
 	return true
 }
 
+func (drf *DateRangeFacet) SizeInBytes() int {
+	return HeapOverhead["DateRangeFacet"] +
+		len(drf.Name)
+}
+
 type DateRangeFacets []*DateRangeFacet
 
 func (drf DateRangeFacets) Add(dateRangeFacet *DateRangeFacet) DateRangeFacets {
@@ -201,6 +255,16 @@ func (drf DateRangeFacets) Less(i, j int) bool {
 		return drf[i].Name < drf[j].Name
 	}
 	return drf[i].Count > drf[j].Count
+}
+
+func (drf DateRangeFacets) SizeInBytes() int {
+	sizeInBytes := index.SizeOfSlice
+
+	for _, entry := range drf {
+		sizeInBytes += entry.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 type FacetResult struct {

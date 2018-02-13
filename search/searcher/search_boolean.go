@@ -16,11 +16,17 @@ package searcher
 
 import (
 	"math"
+	"reflect"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/scorer"
 )
+
+func init() {
+	var bs BooleanSearcher
+	search.HeapOverhead["BooleanSearcher"] = int(reflect.TypeOf(bs).Size()) + index.SizeOfPointer
+}
 
 type BooleanSearcher struct {
 	indexReader     index.IndexReader
@@ -36,6 +42,48 @@ type BooleanSearcher struct {
 	scorer          *scorer.ConjunctionQueryScorer
 	matches         []*search.DocumentMatch
 	initialized     bool
+}
+
+func (s *BooleanSearcher) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["BooleanSearcher"] +
+		s.indexReader.SizeInBytes() +
+		len(s.currentID)
+
+	if s.mustSearcher != nil {
+		sizeInBytes += s.mustSearcher.SizeInBytes()
+	}
+
+	if s.shouldSearcher != nil {
+		sizeInBytes += s.shouldSearcher.SizeInBytes()
+	}
+
+	if s.mustNotSearcher != nil {
+		sizeInBytes += s.mustNotSearcher.SizeInBytes()
+	}
+
+	if s.currMust != nil {
+		sizeInBytes += s.currMust.SizeInBytes()
+	}
+
+	if s.currShould != nil {
+		sizeInBytes += s.currShould.SizeInBytes()
+	}
+
+	if s.currMustNot != nil {
+		sizeInBytes += s.currMustNot.SizeInBytes()
+	}
+
+	if s.scorer != nil {
+		sizeInBytes += s.scorer.SizeInBytes()
+	}
+
+	for _, entry := range s.matches {
+		if entry != nil {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+
+	return sizeInBytes
 }
 
 func NewBooleanSearcher(indexReader index.IndexReader, mustSearcher search.Searcher, shouldSearcher search.Searcher, mustNotSearcher search.Searcher, options search.SearcherOptions) (*BooleanSearcher, error) {

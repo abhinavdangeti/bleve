@@ -17,10 +17,16 @@ package searcher
 import (
 	"fmt"
 	"math"
+	"reflect"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var ps PhraseSearcher
+	search.HeapOverhead["PhraseSearcher"] = int(reflect.TypeOf(ps).Size()) + index.SizeOfPointer
+}
 
 type PhraseSearcher struct {
 	indexReader  index.IndexReader
@@ -30,6 +36,28 @@ type PhraseSearcher struct {
 	slop         int
 	terms        [][]string
 	initialized  bool
+}
+
+func (s *PhraseSearcher) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["PhraseSearcher"] +
+		s.indexReader.SizeInBytes()
+
+	if s.mustSearcher != nil {
+		sizeInBytes += s.mustSearcher.SizeInBytes()
+	}
+
+	if s.currMust != nil {
+		sizeInBytes += s.currMust.SizeInBytes()
+	}
+
+	for _, arr := range s.terms {
+		sizeInBytes += index.SizeOfSlice
+		for _, entry := range arr {
+			sizeInBytes += index.SizeOfString + len(entry)
+		}
+	}
+
+	return sizeInBytes
 }
 
 func NewPhraseSearcher(indexReader index.IndexReader, terms []string, field string, options search.SearcherOptions) (*PhraseSearcher, error) {

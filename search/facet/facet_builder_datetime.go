@@ -15,12 +15,21 @@
 package facet
 
 import (
+	"reflect"
 	"sort"
 	"time"
 
+	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/numeric"
 	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var dtfb DateTimeFacetBuilder
+	search.HeapOverhead["DateTimeFacetBuilder"] = int(reflect.TypeOf(dtfb).Size()) + index.SizeOfPointer
+	var dtr dateTimeRange
+	search.HeapOverhead["dateTimeRange"] = int(reflect.TypeOf(dtr).Size()) + index.SizeOfPointer
+}
 
 type dateTimeRange struct {
 	start time.Time
@@ -131,4 +140,21 @@ func (fb *DateTimeFacetBuilder) Result() *search.FacetResult {
 	rv.Other = fb.total - notOther
 
 	return &rv
+}
+
+func (fb *DateTimeFacetBuilder) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["DateTimeFacetBuilder"] +
+		len(fb.field)
+
+	// termsCount
+	for k, _ := range fb.termsCount {
+		sizeInBytes += len(k) + index.SizeOfString + index.SizeOfInt
+	}
+
+	// ranges
+	for k, _ := range fb.ranges {
+		sizeInBytes += len(k) + index.SizeOfString + search.HeapOverhead["dateTimeRange"]
+	}
+
+	return sizeInBytes
 }

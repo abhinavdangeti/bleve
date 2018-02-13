@@ -36,6 +36,11 @@ type IndexSnapshotTermFieldReader struct {
 	currID             index.IndexInternalID
 }
 
+func (i *IndexSnapshotTermFieldReader) SizeInBytes() int {
+	// TODO: estimate memory usage
+	return 0
+}
+
 func (i *IndexSnapshotTermFieldReader) Next(preAlloced *index.TermFieldDoc) (*index.TermFieldDoc, error) {
 	rv := preAlloced
 	if rv == nil {

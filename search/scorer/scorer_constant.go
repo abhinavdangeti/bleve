@@ -16,10 +16,16 @@ package scorer
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var cs ConstantScorer
+	search.HeapOverhead["ConstantScorer"] = int(reflect.TypeOf(cs).Size()) + index.SizeOfPointer
+}
 
 type ConstantScorer struct {
 	constant               float64
@@ -28,6 +34,17 @@ type ConstantScorer struct {
 	queryNorm              float64
 	queryWeight            float64
 	queryWeightExplanation *search.Explanation
+}
+
+func (s *ConstantScorer) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["ConstantScorer"] +
+		search.HeapOverhead["SearcherOptions"]
+
+	if s.queryWeightExplanation != nil {
+		sizeInBytes += s.queryWeightExplanation.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 func NewConstantScorer(constant float64, boost float64, options search.SearcherOptions) *ConstantScorer {

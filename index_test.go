@@ -37,6 +37,9 @@ import (
 	"github.com/blevesearch/bleve/mapping"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/query"
+
+	"github.com/blevesearch/bleve/index/scorch"
+	"github.com/blevesearch/bleve/index/upsidedown"
 )
 
 func TestCrud(t *testing.T) {
@@ -1810,6 +1813,96 @@ func TestIndexAdvancedCountMatchSearch(t *testing.T) {
 	}
 
 	err = index.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func benchmarkSearchOverhead(indexType string, b *testing.B) {
+	defer func() {
+		err := os.RemoveAll("testidx")
+		if err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	index, err := NewUsing("testidx", NewIndexMapping(),
+		indexType, Config.DefaultKVStore, nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
+	}()
+
+	elements := []string{"air", "water", "fire", "earth"}
+	for j := 0; j < 10000; j++ {
+		err = index.Index(fmt.Sprintf("%d", j),
+			map[string]interface{}{"name": elements[j%len(elements)]})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	query1 := NewMatchQuery("water")
+	query2 := NewMatchQuery("air")
+	query := NewDisjunctionQuery(query1, query2)
+	//query := NewTermQuery("fire")
+	req := NewSearchRequest(query)
+
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		_, err = index.Search(req)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkUpsidedownSearchOverhead(b *testing.B) {
+	benchmarkSearchOverhead(upsidedown.Name, b)
+}
+
+func BenchmarkScorchSearchOverhead(b *testing.B) {
+	benchmarkSearchOverhead(scorch.Name, b)
+}
+
+func TestSearchOverhead(t *testing.T) {
+	defer func() {
+		err := os.RemoveAll("testidx")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	index, err := New("testidx", NewIndexMapping())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		err := index.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	elements := []string{"air", "water", "fire", "earth"}
+	for j := 0; j < 10000; j++ {
+		err = index.Index(fmt.Sprintf("%d", j),
+			map[string]interface{}{"name": elements[j%len(elements)]})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	query := NewTermQuery("water")
+	req := NewSearchRequest(query)
+
+	_, err = index.Search(req)
 	if err != nil {
 		t.Fatal(err)
 	}

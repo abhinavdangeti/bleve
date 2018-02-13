@@ -17,14 +17,23 @@ package bleve
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/blevesearch/bleve/analysis"
 	"github.com/blevesearch/bleve/analysis/datetime/optional"
+	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/registry"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/query"
 )
+
+func init() {
+	var sr SearchResult
+	search.HeapOverhead["SearchResult"] = int(reflect.TypeOf(sr).Size()) + index.SizeOfPointer
+	var ss SearchStatus
+	search.HeapOverhead["SearchStatus"] = int(reflect.TypeOf(ss).Size()) + index.SizeOfPointer
+}
 
 var cache = registry.NewCache()
 

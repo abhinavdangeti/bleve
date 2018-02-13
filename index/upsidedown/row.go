@@ -20,9 +20,19 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 
+	"github.com/blevesearch/bleve/index"
+	"github.com/blevesearch/bleve/search"
 	"github.com/golang/protobuf/proto"
 )
+
+func init() {
+	var tfr TermFrequencyRow
+	search.HeapOverhead["TermFrequencyRow"] = int(reflect.TypeOf(tfr).Size()) + index.SizeOfPointer
+	var tv TermVector
+	search.HeapOverhead["TermVector"] = int(reflect.TypeOf(tv).Size()) + index.SizeOfPointer
+}
 
 const ByteSeparator byte = 0xff
 
@@ -369,6 +379,19 @@ type TermFrequencyRow struct {
 	vectors []*TermVector
 	norm    float32
 	field   uint16
+}
+
+func (tfr *TermFrequencyRow) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["TermFrequencyRow"] +
+		len(tfr.term) +
+		len(tfr.doc)
+
+	for _, entry := range tfr.vectors {
+		sizeInBytes += search.HeapOverhead["TermVector"] +
+			len(entry.arrayPositions)*index.SizeOfUint64
+	}
+
+	return sizeInBytes
 }
 
 func (tfr *TermFrequencyRow) Term() []byte {

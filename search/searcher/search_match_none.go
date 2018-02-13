@@ -15,12 +15,24 @@
 package searcher
 
 import (
+	"reflect"
+
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 )
 
+func init() {
+	var mns MatchNoneSearcher
+	search.HeapOverhead["MatchNoneSearcher"] = int(reflect.TypeOf(mns).Size()) + index.SizeOfPointer
+}
+
 type MatchNoneSearcher struct {
 	indexReader index.IndexReader
+}
+
+func (s *MatchNoneSearcher) SizeInBytes() int {
+	return search.HeapOverhead["MatchNoneSearcher"] +
+		s.indexReader.SizeInBytes()
 }
 
 func NewMatchNoneSearcher(indexReader index.IndexReader) (*MatchNoneSearcher, error) {

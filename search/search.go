@@ -16,10 +16,35 @@ package search
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/blevesearch/bleve/document"
 	"github.com/blevesearch/bleve/index"
 )
+
+// Table of heap overheads from various Search structures
+var HeapOverhead = map[string]int{}
+
+func init() {
+	var sc SearchContext
+	HeapOverhead["SearchContext"] = int(reflect.TypeOf(sc).Size()) + index.SizeOfPointer
+	var dmp DocumentMatchPool
+	HeapOverhead["DocumentMatchPool"] = int(reflect.TypeOf(dmp).Size()) + index.SizeOfPointer
+	var dmc DocumentMatchCollection
+	HeapOverhead["DocumentMatchCollection"] = int(reflect.TypeOf(dmc).Size())
+	var dm DocumentMatch
+	HeapOverhead["DocumentMatch"] = int(reflect.TypeOf(dm).Size()) + index.SizeOfPointer
+	var tlm TermLocationMap
+	HeapOverhead["TermLocationMap"] = int(reflect.TypeOf(tlm).Size())
+	var loc Location
+	HeapOverhead["Location"] = int(reflect.TypeOf(loc).Size()) + index.SizeOfPointer
+	var doc document.Document
+	HeapOverhead["Document"] = int(reflect.TypeOf(doc).Size()) + index.SizeOfPointer
+	var cf document.CompositeField
+	HeapOverhead["CompositeField"] = int(reflect.TypeOf(cf).Size()) + index.SizeOfPointer
+	var so SearcherOptions
+	HeapOverhead["SearcherOptions"] = int(reflect.TypeOf(so).Size()) + index.SizeOfPointer
+}
 
 type ArrayPositions []uint64
 
@@ -47,12 +72,30 @@ type Location struct {
 	ArrayPositions ArrayPositions `json:"array_positions"`
 }
 
+func (l *Location) SizeInBytes() int {
+	return HeapOverhead["Location"] + len(l.ArrayPositions)*index.SizeOfUint64
+}
+
 type Locations []*Location
 
 type TermLocationMap map[string]Locations
 
 func (t TermLocationMap) AddLocation(term string, location *Location) {
 	t[term] = append(t[term], location)
+}
+
+func (t TermLocationMap) SizeInBytes() int {
+	sizeInBytes := HeapOverhead["TermLocationMap"]
+	for k, v := range t {
+		sizeInBytes += len(k) + index.SizeOfString +
+			index.SizeOfSlice /* Locations */
+
+		for _, entry := range v {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+
+	return sizeInBytes
 }
 
 type FieldTermLocationMap map[string]TermLocationMap
@@ -117,6 +160,51 @@ func (dm *DocumentMatch) Reset() *DocumentMatch {
 	return dm
 }
 
+func (dm *DocumentMatch) SizeInBytes() int {
+	sizeInBytes := HeapOverhead["DocumentMatch"] +
+		len(dm.Index) + len(dm.ID) +
+		len(dm.IndexInternalID)
+
+	// Expl
+	if dm.Expl != nil {
+		sizeInBytes += dm.Expl.SizeInBytes()
+	}
+
+	// Locations
+	for k, v := range dm.Locations {
+		sizeInBytes += len(k) + index.SizeOfString + v.SizeInBytes()
+	}
+
+	// Fragments
+	for k, v := range dm.Fragments {
+		sizeInBytes += len(k) + index.SizeOfString + index.SizeOfSlice
+
+		for _, entry := range v {
+			sizeInBytes += len(entry) + index.SizeOfString
+		}
+	}
+
+	// Sort
+	for _, entry := range dm.Sort {
+		sizeInBytes += len(entry) + index.SizeOfString
+	}
+
+	// Fields
+	for k, _ := range dm.Fields {
+		sizeInBytes += len(k) + index.SizeOfString + index.SizeOfInterface
+	}
+
+	// Document
+	if dm.Document != nil {
+		sizeInBytes += HeapOverhead["Document"] + int(dm.Document.NumPlainTextBytes()) +
+			len(dm.Document.ID) +
+			len(dm.Document.Fields)*index.SizeOfInterface +
+			len(dm.Document.CompositeFields)*HeapOverhead["CompositeFields"]
+	}
+
+	return sizeInBytes
+}
+
 func (dm *DocumentMatch) String() string {
 	return fmt.Sprintf("[%s-%f]", string(dm.IndexInternalID), dm.Score)
 }
@@ -127,6 +215,16 @@ func (c DocumentMatchCollection) Len() int           { return len(c) }
 func (c DocumentMatchCollection) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func (c DocumentMatchCollection) Less(i, j int) bool { return c[i].Score > c[j].Score }
 
+func (c DocumentMatchCollection) SizeInBytes() int {
+	sizeInBytes := HeapOverhead["DocumentMatchCollection"]
+	for _, entry := range c {
+		if entry != nil {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+	return sizeInBytes
+}
+
 type Searcher interface {
 	Next(ctx *SearchContext) (*DocumentMatch, error)
 	Advance(ctx *SearchContext, ID index.IndexInternalID) (*DocumentMatch, error)
@@ -135,6 +233,7 @@ type Searcher interface {
 	SetQueryNorm(float64)
 	Count() uint64
 	Min() int
+	SizeInBytes() int
 
 	DocumentMatchPoolSize() int
 }

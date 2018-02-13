@@ -15,15 +15,27 @@
 package upsidedown
 
 import (
+	"reflect"
+
 	"github.com/blevesearch/bleve/document"
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/index/store"
+	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var ir IndexReader
+	search.HeapOverhead["IndexReader"] = int(reflect.TypeOf(ir).Size()) + index.SizeOfPointer
+}
 
 type IndexReader struct {
 	index    *UpsideDownCouch
 	kvreader store.KVReader
 	docCount uint64
+}
+
+func (i *IndexReader) SizeInBytes() int {
+	return search.HeapOverhead["IndexReader"]
 }
 
 func (i *IndexReader) TermFieldReader(term []byte, fieldName string, includeFreq, includeNorm, includeTermVectors bool) (index.TermFieldReader, error) {

@@ -18,12 +18,38 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/blevesearch/bleve/document"
 	"github.com/blevesearch/bleve/index/store"
 )
 
 var ErrorUnknownStorageType = fmt.Errorf("unknown storage type")
+
+// Overhead from go data structures when deployed on a 64-bit system.
+const SizeOfBool = 1
+const SizeOfFloat32 = 4
+const SizeOfFloat64 = 8
+const SizeOfInt = 8
+const SizeOfInterface = 8
+const SizeOfMap = 8
+const SizeOfPointer = 8
+const SizeOfSlice = 24
+const SizeOfString = 16
+const SizeOfTime = 24
+const SizeOfTimeDuration = 8
+const SizeOfUint16 = 2
+const SizeOfUint64 = 8
+
+// Table of heap overheads from various Index structures
+var HeapOverhead = map[string]int{}
+
+func init() {
+	var tfr TermFieldVector
+	HeapOverhead["TermFieldVector"] = int(reflect.TypeOf(tfr).Size()) + SizeOfPointer
+	var tfd TermFieldDoc
+	HeapOverhead["TermFieldDoc"] = int(reflect.TypeOf(tfd).Size()) + SizeOfPointer
+}
 
 type Index interface {
 	Open() error
@@ -82,6 +108,8 @@ type IndexReader interface {
 	DumpFields() chan interface{}
 
 	Close() error
+
+	SizeInBytes() int
 }
 
 // FieldTerms contains the terms used by a document, keyed by field
@@ -115,6 +143,12 @@ type TermFieldVector struct {
 	End            uint64
 }
 
+func (tfv *TermFieldVector) SizeInBytes() int {
+	return HeapOverhead["TermFieldVector"] +
+		len(tfv.Field) +
+		len(tfv.ArrayPositions)*SizeOfUint64
+}
+
 // IndexInternalID is an opaque document identifier interal to the index impl
 type IndexInternalID []byte
 
@@ -132,6 +166,18 @@ type TermFieldDoc struct {
 	Freq    uint64
 	Norm    float64
 	Vectors []*TermFieldVector
+}
+
+func (tfd *TermFieldDoc) SizeInBytes() int {
+	sizeInBytes := HeapOverhead["TermFieldDoc"] +
+		len(tfd.Term) +
+		len(tfd.ID)
+
+	for _, entry := range tfd.Vectors {
+		sizeInBytes += entry.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 // Reset allows an already allocated TermFieldDoc to be reused
@@ -161,6 +207,8 @@ type TermFieldReader interface {
 	// Count returns the number of documents contains the term in this field.
 	Count() uint64
 	Close() error
+
+	SizeInBytes() int
 }
 
 type DictEntry struct {
@@ -185,6 +233,9 @@ type DocIDReader interface {
 	// will start there instead. If ID is greater than or equal to the end of
 	// the range, Next() call will return io.EOF.
 	Advance(ID IndexInternalID) (IndexInternalID, error)
+
+	SizeInBytes() int
+
 	Close() error
 }
 

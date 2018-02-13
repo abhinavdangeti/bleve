@@ -17,10 +17,16 @@ package scorer
 import (
 	"fmt"
 	"math"
+	"reflect"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var tqs TermQueryScorer
+	search.HeapOverhead["TermQueryScorer"] = int(reflect.TypeOf(tqs).Size()) + index.SizeOfPointer
+}
 
 type TermQueryScorer struct {
 	queryTerm              []byte
@@ -34,6 +40,23 @@ type TermQueryScorer struct {
 	queryNorm              float64
 	queryWeight            float64
 	queryWeightExplanation *search.Explanation
+}
+
+func (s *TermQueryScorer) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["TermQueryScorer"] +
+		len(s.queryTerm) +
+		len(s.queryField) +
+		search.HeapOverhead["SearcherOptions"]
+
+	if s.idfExplanation != nil {
+		sizeInBytes += s.idfExplanation.SizeInBytes()
+	}
+
+	if s.queryWeightExplanation != nil {
+		sizeInBytes += s.queryWeightExplanation.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 func NewTermQueryScorer(queryTerm []byte, queryField string, queryBoost float64, docTotal, docTerm uint64, options search.SearcherOptions) *TermQueryScorer {

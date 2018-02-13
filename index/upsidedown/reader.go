@@ -16,12 +16,23 @@ package upsidedown
 
 import (
 	"bytes"
+	"reflect"
 	"sort"
 	"sync/atomic"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/index/store"
+	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var upc_tfr UpsideDownCouchTermFieldReader
+	search.HeapOverhead["UpsideDownCouchTermFieldReader"] =
+		int(reflect.TypeOf(upc_tfr).Size()) + index.SizeOfPointer
+	var upc_dr UpsideDownCouchDocIDReader
+	search.HeapOverhead["UpsideDownCouchDocIDReader"] =
+		int(reflect.TypeOf(upc_dr).Size()) + index.SizeOfPointer
+}
 
 type UpsideDownCouchTermFieldReader struct {
 	count              uint64
@@ -33,6 +44,19 @@ type UpsideDownCouchTermFieldReader struct {
 	keyBuf             []byte
 	field              uint16
 	includeTermVectors bool
+}
+
+func (r *UpsideDownCouchTermFieldReader) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["UpsideDownCouchTermFieldReader"] +
+		len(r.term) +
+		r.tfrPrealloc.SizeInBytes() +
+		len(r.keyBuf)
+
+	if r.tfrNext != nil {
+		sizeInBytes += r.tfrNext.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 func newUpsideDownCouchTermFieldReader(indexReader *IndexReader, term []byte, field uint16, includeFreq, includeNorm, includeTermVectors bool) (*UpsideDownCouchTermFieldReader, error) {
@@ -172,6 +196,16 @@ type UpsideDownCouchDocIDReader struct {
 	only        []string
 	onlyPos     int
 	onlyMode    bool
+}
+
+func (r *UpsideDownCouchDocIDReader) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["UpsideDownCouchDocIDReader"]
+
+	for _, entry := range r.only {
+		sizeInBytes += index.SizeOfString + len(entry)
+	}
+
+	return sizeInBytes
 }
 
 func newUpsideDownCouchDocIDReader(indexReader *IndexReader) (*UpsideDownCouchDocIDReader, error) {

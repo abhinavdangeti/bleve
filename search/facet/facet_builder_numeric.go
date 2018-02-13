@@ -15,11 +15,20 @@
 package facet
 
 import (
+	"reflect"
 	"sort"
 
+	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/numeric"
 	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var nfb NumericFacetBuilder
+	search.HeapOverhead["NumericFacetBuilder"] = int(reflect.TypeOf(nfb).Size()) + index.SizeOfPointer
+	var nr numericRange
+	search.HeapOverhead["numericRange"] = int(reflect.TypeOf(nr).Size()) + index.SizeOfPointer
+}
 
 type numericRange struct {
 	min *float64
@@ -125,4 +134,21 @@ func (fb *NumericFacetBuilder) Result() *search.FacetResult {
 	rv.Other = fb.total - notOther
 
 	return &rv
+}
+
+func (fb *NumericFacetBuilder) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["NumericFacetBuilder"] +
+		len(fb.field)
+
+	// termsCount
+	for k, _ := range fb.termsCount {
+		sizeInBytes += len(k) + index.SizeOfString + index.SizeOfInt
+	}
+
+	// ranges
+	for k, _ := range fb.ranges {
+		sizeInBytes += len(k) + index.SizeOfString + search.HeapOverhead["numericRange"]
+	}
+
+	return sizeInBytes
 }

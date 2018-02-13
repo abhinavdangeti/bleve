@@ -15,9 +15,16 @@
 package searcher
 
 import (
+	"reflect"
+
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var fs FilteringSearcher
+	search.HeapOverhead["FilteringSearcher"] = int(reflect.TypeOf(fs).Size()) + index.SizeOfPointer
+}
 
 // FilterFunc defines a function which can filter documents
 // returning true means keep the document
@@ -29,6 +36,11 @@ type FilterFunc func(d *search.DocumentMatch) bool
 type FilteringSearcher struct {
 	child  search.Searcher
 	accept FilterFunc
+}
+
+func (f *FilteringSearcher) SizeInBytes() int {
+	return search.HeapOverhead["FilteringSearcher"] +
+		f.child.SizeInBytes()
 }
 
 func NewFilteringSearcher(s search.Searcher, filter FilterFunc) *FilteringSearcher {

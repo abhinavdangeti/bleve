@@ -15,10 +15,17 @@
 package facet
 
 import (
+	"reflect"
 	"sort"
 
+	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 )
+
+func init() {
+	var tfb TermsFacetBuilder
+	search.HeapOverhead["TermsFacetBuilder"] = int(reflect.TypeOf(tfb).Size()) + index.SizeOfPointer
+}
 
 type TermsFacetBuilder struct {
 	size       int
@@ -93,4 +100,16 @@ func (fb *TermsFacetBuilder) Result() *search.FacetResult {
 	rv.Other = fb.total - notOther
 
 	return &rv
+}
+
+func (fb *TermsFacetBuilder) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["TermsFacetBuilder"] +
+		len(fb.field)
+
+	// termsCount
+	for k, _ := range fb.termsCount {
+		sizeInBytes += len(k) + index.SizeOfString + index.SizeOfInt
+	}
+
+	return sizeInBytes
 }

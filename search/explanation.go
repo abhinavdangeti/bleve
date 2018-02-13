@@ -17,7 +17,15 @@ package search
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+
+	"github.com/blevesearch/bleve/index"
 )
+
+func init() {
+	var expl Explanation
+	HeapOverhead["Explanation"] = int(reflect.TypeOf(expl).Size()) + index.SizeOfPointer
+}
 
 type Explanation struct {
 	Value    float64        `json:"value"`
@@ -31,4 +39,17 @@ func (expl *Explanation) String() string {
 		return fmt.Sprintf("error serializing explanation to json: %v", err)
 	}
 	return string(js)
+}
+
+func (expl *Explanation) SizeInBytes() int {
+	sizeInBytes := HeapOverhead["Explanation"] +
+		len(expl.Message)
+
+	for _, entry := range expl.Children {
+		if entry != nil {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+
+	return sizeInBytes
 }

@@ -17,6 +17,7 @@ package bleve
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -363,6 +364,46 @@ func (i *indexImpl) Search(req *SearchRequest) (sr *SearchResult, err error) {
 	return i.SearchInContext(context.Background(), req)
 }
 
+// This function is to estimate the heap consumption for a search request.
+func estimateHeapConsumption(req *SearchRequest,
+	searcher search.Searcher,
+	topnCollector *collector.TopNCollector) uint64 {
+
+	backingSize := req.Size + req.From + 1
+	if req.Size+req.From > collector.PreAllocSizeSkipCap {
+		backingSize = collector.PreAllocSizeSkipCap + 1
+	}
+	numDocMatches := backingSize + searcher.DocumentMatchPoolSize()
+
+	memNeeded := 0
+
+	// overhead, size in bytes from collector
+	memNeeded += topnCollector.SizeInBytes()
+
+	// overhead from results
+	memNeeded += (numDocMatches + 1) * search.HeapOverhead["DocumentMatch"] /* results + lowestMatchOutsideResults */
+
+	// pre-allocing DocumentMatchPool
+	memNeeded += search.HeapOverhead["SearchContext"] + search.HeapOverhead["DocumentMatchPool"] +
+		search.HeapOverhead["DocumentMatchCollection"] + numDocMatches*(search.HeapOverhead["DocumentMatch"])
+
+	// additional overhead from SearchResult
+	memNeeded += search.HeapOverhead["SearchResult"] +
+		search.HeapOverhead["SearchStatus"]
+
+	// searcher overhead
+	memNeeded += searcher.SizeInBytes()
+
+	// Highlighting, store
+	if len(req.Fields) > 0 || req.Highlight != nil {
+		for i := 0; i < (req.Size + req.From); i++ { // size + from => number of hits
+			memNeeded += (req.Size + req.From) * search.HeapOverhead["Document"]
+		}
+	}
+
+	return uint64(memNeeded)
+}
+
 // SearchInContext executes a search request operation within the provided
 // Context.  Returns a SearchResult object or an error.
 func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr *SearchResult, err error) {
@@ -401,8 +442,9 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 		}
 	}()
 
+	var facetsBuilder *search.FacetsBuilder
 	if req.Facets != nil {
-		facetsBuilder := search.NewFacetsBuilder(indexReader)
+		facetsBuilder = search.NewFacetsBuilder(indexReader)
 		for facetName, facetRequest := range req.Facets {
 			if facetRequest.NumericRanges != nil {
 				// build numeric range facet
@@ -428,6 +470,9 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 		}
 		collector.SetFacetsBuilder(facetsBuilder)
 	}
+
+	memEstimate := estimateHeapConsumption(req, searcher, collector)
+	log.Println("ESTIMATE: ", memEstimate)
 
 	err = collector.Collect(ctx, searcher, indexReader)
 	if err != nil {

@@ -22,6 +22,10 @@ type ConjunctionQueryScorer struct {
 	options search.SearcherOptions
 }
 
+func (s *ConjunctionQueryScorer) SizeInBytes() int {
+	return search.HeapOverhead["SearcherOptions"]
+}
+
 func NewConjunctionQueryScorer(options search.SearcherOptions) *ConjunctionQueryScorer {
 	return &ConjunctionQueryScorer{
 		options: options,

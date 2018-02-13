@@ -27,6 +27,11 @@ type IndexSnapshotDocIDReader struct {
 	segmentOffset int
 }
 
+func (i *IndexSnapshotDocIDReader) SizeInBytes() int {
+	// TODO: estimate memory usage
+	return 0
+}
+
 func (i *IndexSnapshotDocIDReader) Next() (index.IndexInternalID, error) {
 	for i.segmentOffset < len(i.iterators) {
 		if !i.iterators[i.segmentOffset].HasNext() {

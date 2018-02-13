@@ -15,16 +15,35 @@
 package searcher
 
 import (
+	"reflect"
+
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/scorer"
 )
+
+func init() {
+	var mas MatchAllSearcher
+	search.HeapOverhead["MatchAllSearcher"] = int(reflect.TypeOf(mas).Size()) + index.SizeOfPointer
+}
 
 type MatchAllSearcher struct {
 	indexReader index.IndexReader
 	reader      index.DocIDReader
 	scorer      *scorer.ConstantScorer
 	count       uint64
+}
+
+func (s *MatchAllSearcher) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["MatchAllSearcher"] +
+		s.indexReader.SizeInBytes() +
+		s.reader.SizeInBytes()
+
+	if s.scorer != nil {
+		sizeInBytes += s.scorer.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 func NewMatchAllSearcher(indexReader index.IndexReader, boost float64, options search.SearcherOptions) (*MatchAllSearcher, error) {

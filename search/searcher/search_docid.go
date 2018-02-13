@@ -15,16 +15,34 @@
 package searcher
 
 import (
+	"reflect"
+
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/scorer"
 )
+
+func init() {
+	var ds DocIDSearcher
+	search.HeapOverhead["DocIDSearcher"] = int(reflect.TypeOf(ds).Size()) + index.SizeOfPointer
+}
 
 // DocIDSearcher returns documents matching a predefined set of identifiers.
 type DocIDSearcher struct {
 	reader index.DocIDReader
 	scorer *scorer.ConstantScorer
 	count  int
+}
+
+func (s *DocIDSearcher) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["DocIDSearcher"] +
+		s.reader.SizeInBytes()
+
+	if s.scorer != nil {
+		sizeInBytes += s.scorer.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 func NewDocIDSearcher(indexReader index.IndexReader, ids []string, boost float64,

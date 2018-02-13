@@ -17,12 +17,18 @@ package searcher
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/scorer"
 )
+
+func init() {
+	var ds DisjunctionSearcher
+	search.HeapOverhead["DisjunctionSearcher"] = int(reflect.TypeOf(ds).Size()) + index.SizeOfPointer
+}
 
 // DisjunctionMaxClauseCount is a compile time setting that applications can
 // adjust to non-zero value to cause the DisjunctionSearcher to return an
@@ -40,6 +46,34 @@ type DisjunctionSearcher struct {
 	matching     []*search.DocumentMatch
 	matchingIdxs []int
 	initialized  bool
+}
+
+func (s *DisjunctionSearcher) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["DisjunctionSearcher"] +
+		s.indexReader.SizeInBytes() +
+		len(s.matchingIdxs)*index.SizeOfInt
+
+	for _, entry := range s.searchers {
+		sizeInBytes += entry.SizeInBytes()
+	}
+
+	for _, entry := range s.currs {
+		if entry != nil {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+
+	if s.scorer != nil {
+		sizeInBytes += s.scorer.SizeInBytes()
+	}
+
+	for _, entry := range s.matching {
+		if entry != nil {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+
+	return sizeInBytes
 }
 
 func tooManyClauses(count int) bool {

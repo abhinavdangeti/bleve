@@ -16,12 +16,18 @@ package searcher
 
 import (
 	"math"
+	"reflect"
 	"sort"
 
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/scorer"
 )
+
+func init() {
+	var cs ConjunctionSearcher
+	search.HeapOverhead["ConjunctionSearcher"] = int(reflect.TypeOf(cs).Size()) + index.SizeOfPointer
+}
 
 type ConjunctionSearcher struct {
 	indexReader index.IndexReader
@@ -32,6 +38,28 @@ type ConjunctionSearcher struct {
 	scorer      *scorer.ConjunctionQueryScorer
 	initialized bool
 	options     search.SearcherOptions
+}
+
+func (s *ConjunctionSearcher) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["ConjunctionSearcher"] +
+		s.indexReader.SizeInBytes() +
+		search.HeapOverhead["SearcherOptions"]
+
+	for _, entry := range s.searchers {
+		sizeInBytes += entry.SizeInBytes()
+	}
+
+	for _, entry := range s.currs {
+		if entry != nil {
+			sizeInBytes += entry.SizeInBytes()
+		}
+	}
+
+	if s.scorer != nil {
+		sizeInBytes += s.scorer.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 func NewConjunctionSearcher(indexReader index.IndexReader, qsearchers []search.Searcher, options search.SearcherOptions) (*ConjunctionSearcher, error) {

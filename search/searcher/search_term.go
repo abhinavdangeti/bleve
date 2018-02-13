@@ -15,16 +15,36 @@
 package searcher
 
 import (
+	"reflect"
+
 	"github.com/blevesearch/bleve/index"
 	"github.com/blevesearch/bleve/search"
 	"github.com/blevesearch/bleve/search/scorer"
 )
+
+func init() {
+	var ts TermSearcher
+	search.HeapOverhead["TermSearcher"] = int(reflect.TypeOf(ts).Size()) + index.SizeOfPointer
+}
 
 type TermSearcher struct {
 	indexReader index.IndexReader
 	reader      index.TermFieldReader
 	scorer      *scorer.TermQueryScorer
 	tfd         index.TermFieldDoc
+}
+
+func (s *TermSearcher) SizeInBytes() int {
+	sizeInBytes := search.HeapOverhead["TermSearcher"] +
+		s.indexReader.SizeInBytes() +
+		s.reader.SizeInBytes() +
+		s.tfd.SizeInBytes()
+
+	if s.scorer != nil {
+		sizeInBytes += s.scorer.SizeInBytes()
+	}
+
+	return sizeInBytes
 }
 
 func NewTermSearcher(indexReader index.IndexReader, term string, field string, boost float64, options search.SearcherOptions) (*TermSearcher, error) {

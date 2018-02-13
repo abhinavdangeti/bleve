@@ -24,6 +24,10 @@ type DisjunctionQueryScorer struct {
 	options search.SearcherOptions
 }
 
+func (s *DisjunctionQueryScorer) SizeInBytes() int {
+	return search.HeapOverhead["SearcherOptions"]
+}
+
 func NewDisjunctionQueryScorer(options search.SearcherOptions) *DisjunctionQueryScorer {
 	return &DisjunctionQueryScorer{
 		options: options,
