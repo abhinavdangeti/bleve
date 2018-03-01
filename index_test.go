@@ -1853,6 +1853,11 @@ func benchmarkSearchOverhead(indexType string, b *testing.B) {
 	query := NewDisjunctionQuery(query1, query2)
 	req := NewSearchRequest(query)
 
+	_, err = index.MemoryNeededForSearch(req)
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {

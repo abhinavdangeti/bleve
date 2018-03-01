@@ -356,12 +356,6 @@ func (i *indexImpl) DocCount() (count uint64, err error) {
 	return
 }
 
-// Search executes a search request operation.
-// Returns a SearchResult object or an error.
-func (i *indexImpl) Search(req *SearchRequest) (sr *SearchResult, err error) {
-	return i.SearchInContext(context.Background(), req)
-}
-
 // This function returns an estimate of heap usage for a search request.
 func memNeeded(req *SearchRequest,
 	searcher search.Searcher,
@@ -412,6 +406,85 @@ func memNeeded(req *SearchRequest,
 	return uint64(estimate)
 }
 
+func (i *indexImpl) createFacetsBuilder(indexReader index.IndexReader,
+	facets FacetsRequest) *search.FacetsBuilder {
+	facetsBuilder := search.NewFacetsBuilder(indexReader)
+	for facetName, facetRequest := range facets {
+		if facetRequest.NumericRanges != nil {
+			// build numeric range facet
+			facetBuilder := facet.NewNumericFacetBuilder(facetRequest.Field, facetRequest.Size)
+			for _, nr := range facetRequest.NumericRanges {
+				facetBuilder.AddRange(nr.Name, nr.Min, nr.Max)
+			}
+			facetsBuilder.Add(facetName, facetBuilder)
+		} else if facetRequest.DateTimeRanges != nil {
+			// build date range facet
+			facetBuilder := facet.NewDateTimeFacetBuilder(facetRequest.Field, facetRequest.Size)
+			dateTimeParser := i.m.DateTimeParserNamed("")
+			for _, dr := range facetRequest.DateTimeRanges {
+				start, end := dr.ParseDates(dateTimeParser)
+				facetBuilder.AddRange(dr.Name, start, end)
+			}
+			facetsBuilder.Add(facetName, facetBuilder)
+		} else {
+			// build terms facet
+			facetBuilder := facet.NewTermsFacetBuilder(facetRequest.Field, facetRequest.Size)
+			facetsBuilder.Add(facetName, facetBuilder)
+		}
+	}
+
+	return facetsBuilder
+}
+
+// MemoryNeededForSearch estimates the amount of memory needed to execute
+// the provided search request.
+func (i *indexImpl) MemoryNeededForSearch(req *SearchRequest) (estimate uint64, err error) {
+	i.mutex.RLock()
+	defer i.mutex.RUnlock()
+
+	if !i.open {
+		return 0, ErrorIndexClosed
+	}
+
+	var collector collector.TopNCollector
+
+	// open a reader for this search
+	indexReader, err := i.i.Reader()
+	if err != nil {
+		return 0, fmt.Errorf("error opening index reader %v", err)
+	}
+	defer func() {
+		if cerr := indexReader.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+
+	searcher, err := req.Query.Searcher(indexReader, i.m, search.SearcherOptions{
+		Explain:            req.Explain,
+		IncludeTermVectors: req.IncludeLocations || req.Highlight != nil,
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if serr := searcher.Close(); err == nil && serr != nil {
+			err = serr
+		}
+	}()
+
+	if req.Facets != nil {
+		collector.SetFacetsBuilder(i.createFacetsBuilder(indexReader, req.Facets))
+	}
+
+	return uint64(memNeeded(req, searcher, &collector)), err
+}
+
+// Search executes a search request operation.
+// Returns a SearchResult object or an error.
+func (i *indexImpl) Search(req *SearchRequest) (sr *SearchResult, err error) {
+	return i.SearchInContext(context.Background(), req)
+}
+
 // SearchInContext executes a search request operation within the provided
 // Context. Returns a SearchResult object or an error.
 func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr *SearchResult, err error) {
@@ -451,31 +524,7 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 	}()
 
 	if req.Facets != nil {
-		facetsBuilder := search.NewFacetsBuilder(indexReader)
-		for facetName, facetRequest := range req.Facets {
-			if facetRequest.NumericRanges != nil {
-				// build numeric range facet
-				facetBuilder := facet.NewNumericFacetBuilder(facetRequest.Field, facetRequest.Size)
-				for _, nr := range facetRequest.NumericRanges {
-					facetBuilder.AddRange(nr.Name, nr.Min, nr.Max)
-				}
-				facetsBuilder.Add(facetName, facetBuilder)
-			} else if facetRequest.DateTimeRanges != nil {
-				// build date range facet
-				facetBuilder := facet.NewDateTimeFacetBuilder(facetRequest.Field, facetRequest.Size)
-				dateTimeParser := i.m.DateTimeParserNamed("")
-				for _, dr := range facetRequest.DateTimeRanges {
-					start, end := dr.ParseDates(dateTimeParser)
-					facetBuilder.AddRange(dr.Name, start, end)
-				}
-				facetsBuilder.Add(facetName, facetBuilder)
-			} else {
-				// build terms facet
-				facetBuilder := facet.NewTermsFacetBuilder(facetRequest.Field, facetRequest.Size)
-				facetsBuilder.Add(facetName, facetBuilder)
-			}
-		}
-		collector.SetFacetsBuilder(facetsBuilder)
+		collector.SetFacetsBuilder(i.createFacetsBuilder(indexReader, req.Facets))
 	}
 
 	err = collector.Collect(ctx, searcher, indexReader)

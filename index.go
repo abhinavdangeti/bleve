@@ -183,6 +183,7 @@ type Index interface {
 	// DocCount returns the number of documents in the index.
 	DocCount() (uint64, error)
 
+	MemoryNeededForSearch(req *SearchRequest) (uint64, error)
 	Search(req *SearchRequest) (*SearchResult, error)
 	SearchInContext(ctx context.Context, req *SearchRequest) (*SearchResult, error)
 
