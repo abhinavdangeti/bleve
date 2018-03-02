@@ -1858,6 +1858,11 @@ func benchmarkSearchOverhead(indexType string, b *testing.B) {
 		b.Fatal(err)
 	}
 
+	_, err = index.MemoryNeededForSearchResult(req)
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {

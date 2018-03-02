@@ -479,6 +479,73 @@ func (i *indexImpl) MemoryNeededForSearch(req *SearchRequest) (estimate uint64, 
 	return uint64(memNeeded(req, searcher, &collector)), err
 }
 
+// MemoryNeededForSearchResult estimates the amount of memory that will be
+// consumed by the search results for the provided search request.
+func (i *indexImpl) MemoryNeededForSearchResult(req *SearchRequest) (estimate uint64, err error) {
+	i.mutex.RLock()
+	defer i.mutex.RUnlock()
+
+	if !i.open {
+		return 0, ErrorIndexClosed
+	}
+
+	// open a reader for this search
+	indexReader, err := i.i.Reader()
+	if err != nil {
+		return 0, fmt.Errorf("error opening index reader %v", err)
+	}
+	defer func() {
+		if cerr := indexReader.Close(); err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
+
+	searcher, err := req.Query.Searcher(indexReader, i.m, search.SearcherOptions{
+		Explain:            req.Explain,
+		IncludeTermVectors: req.IncludeLocations || req.Highlight != nil,
+	})
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if serr := searcher.Close(); err == nil && serr != nil {
+			err = serr
+		}
+	}()
+
+	backingSize := req.Size + req.From + 1
+	if req.Size+req.From > collector.PreAllocSizeSkipCap {
+		backingSize = collector.PreAllocSizeSkipCap + 1
+	}
+	numDocMatches := backingSize + searcher.DocumentMatchPoolSize()
+
+	var dm search.DocumentMatch
+	sizeOfDocumentMatch := dm.Size()
+
+	// overhead from results/hits
+	estimate += uint64(numDocMatches * sizeOfDocumentMatch)
+
+	// additional overhead from SearchResult
+	var sr SearchResult
+	estimate += uint64(sr.Size())
+
+	// overhead from facet results
+	if req.Facets != nil {
+		var fr search.FacetResult
+		estimate += uint64(len(req.Facets) * (fr.Size()))
+	}
+
+	// highlighting, store
+	var d document.Document
+	if len(req.Fields) > 0 || req.Highlight != nil {
+		for i := 0; i < (req.Size + req.From); i++ { // size + from => number of hits
+			estimate += uint64((req.Size + req.From) * d.Size())
+		}
+	}
+
+	return
+}
+
 // Search executes a search request operation.
 // Returns a SearchResult object or an error.
 func (i *indexImpl) Search(req *SearchRequest) (sr *SearchResult, err error) {

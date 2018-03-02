@@ -1283,6 +1283,10 @@ func (i *stubIndex) MemoryNeededForSearch(req *SearchRequest) (uint64, error) {
 	return 0, nil
 }
 
+func (i *stubIndex) MemoryNeededForSearchResult(req *SearchRequest) (uint64, error) {
+	return 0, nil
+}
+
 func (i *stubIndex) SearchInContext(ctx context.Context, req *SearchRequest) (*SearchResult, error) {
 	if i.checkRequest != nil {
 		err := i.checkRequest(req)

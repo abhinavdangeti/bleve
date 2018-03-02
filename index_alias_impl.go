@@ -166,6 +166,30 @@ func (i *indexAliasImpl) MemoryNeededForSearch(req *SearchRequest) (uint64, erro
 	return sizeEstimate, nil
 }
 
+func (i *indexAliasImpl) MemoryNeededForSearchResult(req *SearchRequest) (uint64, error) {
+	i.mutex.RLock()
+	defer i.mutex.RUnlock()
+
+	if !i.open {
+		return 0, ErrorIndexClosed
+	}
+
+	if len(i.indexes) < 1 {
+		return 0, ErrorAliasEmpty
+	}
+
+	var sizeEstimate uint64
+	for _, in := range i.indexes {
+		estimate, err := in.MemoryNeededForSearchResult(req)
+		if err == nil {
+			sizeEstimate += estimate
+		}
+		// tolerate errors to produce partial search results
+	}
+
+	return sizeEstimate, nil
+}
+
 func (i *indexAliasImpl) SearchInContext(ctx context.Context, req *SearchRequest) (*SearchResult, error) {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
