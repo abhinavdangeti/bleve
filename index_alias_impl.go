@@ -18,6 +18,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/blevesearch/bleve/document"
@@ -449,6 +450,25 @@ func MultiSearch(ctx context.Context, req *SearchRequest, indexes ...Index) (*Se
 
 	searchStart := time.Now()
 	asyncResults := make(chan *asyncSearchResult, len(indexes))
+
+	// Set up a redirection to the original search memory callback to
+	// estimate the aggregate over all the pindexes.
+	if memCb := ctx.Value(SearchMemCheckCallbackKey); memCb != nil {
+		if memCbFn, ok := memCb.(SearchMemCheckCallbackFn); ok {
+			var count uint64
+			var aggregate uint64
+			f := func(size uint64) error {
+				atomic.AddUint64(&aggregate, size)
+				atomic.AddUint64(&count, 1)
+				// wait till the aggregate is estimated from all the pindexes
+				for atomic.LoadUint64(&count) < uint64(len(indexes)) {
+				}
+				return memCbFn(aggregate)
+			}
+			// overwrite the context-key's value with the new method
+			ctx = context.WithValue(ctx, SearchMemCheckCallbackKey, SearchMemCheckCallbackFn(f))
+		}
+	}
 
 	// run search on each index in separate go routine
 	var waitGroup sync.WaitGroup

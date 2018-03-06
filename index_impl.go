@@ -50,6 +50,10 @@ const storePath = "store"
 
 var mappingInternalKey = []byte("_mapping")
 
+const SearchMemCheckCallbackKey = "_search_mem_callback_key"
+
+type SearchMemCheckCallbackFn func(size uint64) error
+
 func indexStorePath(path string) string {
 	return path + string(os.PathSeparator) + storePath
 }
@@ -418,9 +422,19 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
 
+	memCheckCallback := func(size uint64) error {
+		if memCb := ctx.Value(SearchMemCheckCallbackKey); memCb != nil {
+			if memCbFn, ok := memCb.(SearchMemCheckCallbackFn); ok {
+				return memCbFn(size)
+			}
+		}
+		return nil
+	}
+
 	searchStart := time.Now()
 
 	if !i.open {
+		_ = memCheckCallback(0)
 		return nil, ErrorIndexClosed
 	}
 
@@ -429,6 +443,7 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 	// open a reader for this search
 	indexReader, err := i.i.Reader()
 	if err != nil {
+		_ = memCheckCallback(0)
 		return nil, fmt.Errorf("error opening index reader %v", err)
 	}
 	defer func() {
@@ -442,6 +457,7 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 		IncludeTermVectors: req.IncludeLocations || req.Highlight != nil,
 	})
 	if err != nil {
+		_ = memCheckCallback(0)
 		return nil, err
 	}
 	defer func() {
@@ -476,6 +492,11 @@ func (i *indexImpl) SearchInContext(ctx context.Context, req *SearchRequest) (sr
 			}
 		}
 		collector.SetFacetsBuilder(facetsBuilder)
+	}
+
+	err = memCheckCallback(memNeeded(req, searcher, collector))
+	if err != nil {
+		return nil, err
 	}
 
 	err = collector.Collect(ctx, searcher, indexReader)
