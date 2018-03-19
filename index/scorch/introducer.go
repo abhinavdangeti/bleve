@@ -20,6 +20,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/blevesearch/bleve/index/scorch/segment"
+	log "github.com/couchbase/clog"
 )
 
 type segmentIntroduction struct {
@@ -172,6 +173,9 @@ func (s *Scorch) introduceSegment(next *segmentIntroduction) error {
 		// queued for persistence.
 		atomic.AddUint64(&s.stats.TotIntroducedItems, newSegmentSnapshot.Count())
 		atomic.AddUint64(&s.stats.TotIntroducedSegmentsBatch, 1)
+
+		log.Printf("SegmentIntro ID: %v, fields: %v", next.id, next.data.Fields())
+		log.Printf("SegmentIntro ID: %v, docids: %v", next.id, next.ids)
 	}
 	// copy old values
 	for key, oldVal := range root.internal {
@@ -346,6 +350,8 @@ func (s *Scorch) introduceMerge(nextMerge *segmentMerge) {
 		})
 		newSnapshot.offsets = append(newSnapshot.offsets, running)
 		atomic.AddUint64(&s.stats.TotIntroducedSegmentsMerge, 1)
+
+		log.Printf("SegmentMerge ID: %v, fields: %v", nextMerge.id, nextMerge.new.Fields())
 	}
 
 	newSnapshot.AddRef() // 1 ref for the nextMerge.notify response
