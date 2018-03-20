@@ -242,6 +242,44 @@ func (s *Scorch) introducePersist(persist *persistIntroduction) {
 			newIndexSnapshot.segment[i] = newSegmentSnapshot
 			delete(persist.persisted, segmentSnapshot.id)
 
+			log.Printf("SegmentPersist ID: %v, fields: %v", newSegmentSnapshot.id, newSegmentSnapshot.segment.Fields())
+			dict_id, _ := newSegmentSnapshot.segment.Dictionary("_id")
+			ids := []string{}
+			if dict_id != nil {
+				itr := dict_id.Iterator()
+				next, err := itr.Next()
+				for next != nil && err == nil {
+					ids = append(ids, next.Term)
+					next, err = itr.Next()
+				}
+			}
+			log.Printf("SegmentPersist ID: %v, docids: %v", newSegmentSnapshot.id, ids)
+			dict_managesreports, _ := newSegmentSnapshot.segment.Dictionary("manages.reports")
+			if dict_managesreports != nil {
+				ids_drucilla := []uint64{}
+				pl_drucilla, _ := dict_managesreports.PostingsList("Drucilla", nil)
+				if pl_drucilla != nil {
+					itr := pl_drucilla.Iterator()
+					next, err := itr.Next()
+					for next != nil && err == nil {
+						ids_drucilla = append(ids_drucilla, next.Number())
+						next, err = itr.Next()
+					}
+				}
+				ids_cytheria := []uint64{}
+				pl_cytheria, _ := dict_managesreports.PostingsList("Cytheria", nil)
+				if pl_cytheria != nil {
+					itr := pl_cytheria.Iterator()
+					next, err := itr.Next()
+					for next != nil && err == nil {
+						ids_cytheria = append(ids_cytheria, next.Number())
+						next, err = itr.Next()
+					}
+				}
+				log.Printf("SegmentPersist ID: %v, drucilla: %v", newSegmentSnapshot.id, ids_drucilla)
+				log.Printf("SegmentPersist ID: %v, cytheria: %v", newSegmentSnapshot.id, ids_cytheria)
+			}
+
 			// update items persisted incase of a new segment snapshot
 			atomic.AddUint64(&s.stats.TotPersistedItems, newSegmentSnapshot.Count())
 			atomic.AddUint64(&s.stats.TotPersistedSegments, 1)
@@ -352,6 +390,42 @@ func (s *Scorch) introduceMerge(nextMerge *segmentMerge) {
 		atomic.AddUint64(&s.stats.TotIntroducedSegmentsMerge, 1)
 
 		log.Printf("SegmentMerge ID: %v, fields: %v", nextMerge.id, nextMerge.new.Fields())
+		dict_id, _ := nextMerge.new.Dictionary("_id")
+		ids := []string{}
+		if dict_id != nil {
+			itr := dict_id.Iterator()
+			next, err := itr.Next()
+			for next != nil && err == nil {
+				ids = append(ids, next.Term)
+				next, err = itr.Next()
+			}
+		}
+		log.Printf("SegmentMerge ID: %v, docids: %v", nextMerge.id, ids)
+		dict_managesreports, _ := nextMerge.new.Dictionary("manages.reports")
+		if dict_managesreports != nil {
+			ids_drucilla := []uint64{}
+			pl_drucilla, _ := dict_managesreports.PostingsList("Drucilla", nil)
+			if pl_drucilla != nil {
+				itr := pl_drucilla.Iterator()
+				next, err := itr.Next()
+				for next != nil && err == nil {
+					ids_drucilla = append(ids_drucilla, next.Number())
+					next, err = itr.Next()
+				}
+			}
+			ids_cytheria := []uint64{}
+			pl_cytheria, _ := dict_managesreports.PostingsList("Cytheria", nil)
+			if pl_cytheria != nil {
+				itr := pl_cytheria.Iterator()
+				next, err := itr.Next()
+				for next != nil && err == nil {
+					ids_cytheria = append(ids_cytheria, next.Number())
+					next, err = itr.Next()
+				}
+			}
+			log.Printf("SegmentMerge ID: %v, drucilla: %v", nextMerge.id, ids_drucilla)
+			log.Printf("SegmentMerge ID: %v, cytheria: %v", nextMerge.id, ids_cytheria)
+		}
 	}
 
 	newSnapshot.AddRef() // 1 ref for the nextMerge.notify response
