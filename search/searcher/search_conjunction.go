@@ -15,6 +15,7 @@
 package searcher
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -84,6 +85,7 @@ func NewConjunctionSearcher(indexReader index.IndexReader, qsearchers []search.S
 		}
 	}
 
+	fmt.Printf("NEW CONJ: %p, %#v\n", &rv, rv.searchers)
 	return &rv, nil
 }
 
@@ -151,6 +153,7 @@ func (s *ConjunctionSearcher) SetQueryNorm(qnorm float64) {
 func (s *ConjunctionSearcher) Next(ctx *search.SearchContext) (*search.DocumentMatch, error) {
 	if !s.initialized {
 		err := s.initSearchers(ctx)
+		fmt.Printf("CONJ Next: %p initSearchers ran, currs: %v\n", s, s.currs)
 		if err != nil {
 			return nil, err
 		}
@@ -167,6 +170,7 @@ OUTER:
 				return nil, nil
 			}
 
+			fmt.Printf("CONJ Next %p, maxID: %v, maxIDIdx: %v, i: %v, %v\n", s, string(maxID), s.maxIDIdx, i, s.currs)
 			if i == s.maxIDIdx {
 				i++
 				continue
@@ -186,6 +190,7 @@ OUTER:
 				// know they were equal to the former max entry
 				maxID = s.currs[s.maxIDIdx].IndexInternalID
 				for x := 0; x < i; x++ {
+					fmt.Printf("CONJ Next cmp < 0 %p invokes advanceChild; %v %v\n", s, x, string(maxID))
 					err = s.advanceChild(ctx, x, maxID)
 					if err != nil {
 						return nil, err
@@ -195,6 +200,7 @@ OUTER:
 				continue OUTER
 			}
 
+			fmt.Printf("CONJ Next maxID > currs[i] %p invokes advanceChild; %v %v %v\n", s, i, string(maxID), s.currs)
 			// maxID > currs[i], so need to advance searchers[i]
 			err = s.advanceChild(ctx, i, maxID)
 			if err != nil {
@@ -210,6 +216,7 @@ OUTER:
 
 		// we know all the searchers are pointing at the same thing
 		// so they all need to be bumped
+		fmt.Printf("CONJ Next: %p, pre bump: currs: %v, searchers: %v\n", s, s.currs, s.searchers)
 		for i, searcher := range s.searchers {
 			if s.currs[i] != rv {
 				ctx.DocumentMatchPool.Put(s.currs[i])
@@ -219,6 +226,7 @@ OUTER:
 				return nil, err
 			}
 		}
+		fmt.Printf("CONJ Next: %p, currs: %v, searchers: %v\n", s, s.currs, s.searchers)
 
 		// don't continue now, wait for the next call to Next()
 		break
@@ -229,11 +237,14 @@ OUTER:
 func (s *ConjunctionSearcher) Advance(ctx *search.SearchContext, ID index.IndexInternalID) (*search.DocumentMatch, error) {
 	if !s.initialized {
 		err := s.initSearchers(ctx)
+		fmt.Printf("CONJ Advance: initSearchers ran, currs: %p, %v\n", s, s.currs)
 		if err != nil {
 			return nil, err
 		}
 	}
+	fmt.Printf("CONJ Advance: %p %v %v\n", s, string(ID), s.searchers)
 	for i := range s.searchers {
+		fmt.Printf("CONJ Advance: %p %v\n", s, s.currs[i])
 		if s.currs[i] != nil && s.currs[i].IndexInternalID.Compare(ID) >= 0 {
 			continue
 		}
@@ -241,6 +252,7 @@ func (s *ConjunctionSearcher) Advance(ctx *search.SearchContext, ID index.IndexI
 		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("CONJ %p advancing.. new curr: %v\n", s, s.currs[i])
 	}
 	return s.Next(ctx)
 }
@@ -249,7 +261,9 @@ func (s *ConjunctionSearcher) advanceChild(ctx *search.SearchContext, i int, ID 
 	if s.currs[i] != nil {
 		ctx.DocumentMatchPool.Put(s.currs[i])
 	}
+	fmt.Printf("\tCONJ advanceChild %p, old currs: %v, sub searcher's p: %p\n", s, s.currs, s.searchers[i])
 	s.currs[i], err = s.searchers[i].Advance(ctx, ID)
+	fmt.Printf("\tCONJ advanceChild %p, new currs: %v, sub searcher's p: %p\n", s, s.currs, s.searchers[i])
 	return err
 }
 

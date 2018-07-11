@@ -15,6 +15,7 @@
 package searcher
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -71,6 +72,7 @@ func newDisjunctionSliceSearcher(indexReader index.IndexReader,
 		matchingIdxs: make([]int, len(searchers)),
 	}
 	rv.computeQueryNorm()
+	fmt.Printf("NEW DISJ: %p, %#v\n", &rv, rv.searchers)
 	return &rv, nil
 }
 
@@ -185,6 +187,7 @@ func (s *DisjunctionSliceSearcher) Next(ctx *search.SearchContext) (
 	*search.DocumentMatch, error) {
 	if !s.initialized {
 		err := s.initSearchers(ctx)
+		fmt.Printf("DISJ Next: initSearchers ran, currs: %p, %v\n", s, s.currs)
 		if err != nil {
 			return nil, err
 		}
@@ -217,6 +220,7 @@ func (s *DisjunctionSliceSearcher) Next(ctx *search.SearchContext) (
 			return nil, err
 		}
 	}
+	fmt.Printf("DISJ Next: %p, currs: %v, searchers: %v\n", s, s.currs, s.searchers)
 	return rv, nil
 }
 
@@ -224,13 +228,16 @@ func (s *DisjunctionSliceSearcher) Advance(ctx *search.SearchContext,
 	ID index.IndexInternalID) (*search.DocumentMatch, error) {
 	if !s.initialized {
 		err := s.initSearchers(ctx)
+		fmt.Printf("DISJ Advance: initSearchers ran, currs: %p, %v\n", s, s.currs)
 		if err != nil {
 			return nil, err
 		}
 	}
 	// get all searchers pointing at their first match
 	var err error
+	fmt.Printf("DISJ: %v %v %p\n", string(ID), s.searchers, s)
 	for i, searcher := range s.searchers {
+		fmt.Printf("DISJ: %v %p\n", s.currs[i], s)
 		if s.currs[i] != nil {
 			if s.currs[i].IndexInternalID.Compare(ID) >= 0 {
 				continue
@@ -241,6 +248,7 @@ func (s *DisjunctionSliceSearcher) Advance(ctx *search.SearchContext,
 		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("DISJ advancing.. new curr: %v %p\n", s.currs[i], s)
 	}
 
 	err = s.updateMatches()

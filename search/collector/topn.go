@@ -15,6 +15,7 @@
 package collector
 
 import (
+	"fmt"
 	"context"
 	"reflect"
 	"time"
@@ -174,6 +175,7 @@ func (hc *TopNCollector) Collect(ctx context.Context, searcher search.Searcher, 
 			break
 		}
 
+		fmt.Println("Collector collected:", next)
 		next, err = searcher.Next(searchContext)
 	}
 	// compute search duration

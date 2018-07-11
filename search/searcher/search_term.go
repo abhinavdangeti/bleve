@@ -15,6 +15,7 @@
 package searcher
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/blevesearch/bleve/index"
@@ -106,6 +107,7 @@ func (s *TermSearcher) Next(ctx *search.SearchContext) (*search.DocumentMatch, e
 	// score match
 	docMatch := s.scorer.Score(ctx, termMatch)
 	// return doc match
+	fmt.Printf("TERM Next: %v, %p\n", docMatch, s)
 	return docMatch, nil
 
 }
@@ -124,6 +126,7 @@ func (s *TermSearcher) Advance(ctx *search.SearchContext, ID index.IndexInternal
 	docMatch := s.scorer.Score(ctx, termMatch)
 
 	// return doc match
+	fmt.Printf("TERM Advance %v, %v, %p\n", string(ID), docMatch, s)
 	return docMatch, nil
 }
 

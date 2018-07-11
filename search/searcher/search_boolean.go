@@ -15,6 +15,7 @@
 package searcher
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 
@@ -58,6 +59,7 @@ func NewBooleanSearcher(indexReader index.IndexReader, mustSearcher search.Searc
 		matches:         make([]*search.DocumentMatch, 2),
 	}
 	rv.computeQueryNorm()
+	fmt.Printf("NEW BOOL: %p, %#v\n", &rv, rv.mustSearcher)
 	return &rv, nil
 }
 
@@ -160,7 +162,9 @@ func (s *BooleanSearcher) advanceNextMust(ctx *search.SearchContext, skipReturn 
 		if s.currMust != skipReturn {
 			ctx.DocumentMatchPool.Put(s.currMust)
 		}
+		fmt.Printf("BOOL Next before %p, mustSearcher: %p, currMust: %v\n", s, s.mustSearcher, s.currMust)
 		s.currMust, err = s.mustSearcher.Next(ctx)
+		fmt.Printf("BOOL Next after %p, mustSearcher: %p, currMust: %v\n", s, s.mustSearcher, s.currMust)
 		if err != nil {
 			return err
 		}
@@ -333,13 +337,20 @@ func (s *BooleanSearcher) Advance(ctx *search.SearchContext, ID index.IndexInter
 
 	var err error
 	if s.mustSearcher != nil {
-		if s.currMust != nil {
-			ctx.DocumentMatchPool.Put(s.currMust)
-		}
-		s.currMust, err = s.mustSearcher.Advance(ctx, ID)
-		if err != nil {
-			return nil, err
-		}
+		fmt.Printf("BOOL Advance %p, mustSearcher: %p, currMust: %v\n", s, s.mustSearcher, s.currMust)
+		//if s.currMust == nil || s.currMust.IndexInternalID.Compare(ID) < 0 {
+			if s.currMust != nil {
+				ctx.DocumentMatchPool.Put(s.currMust)
+			}
+			fmt.Printf("BOOL Advance %p %v mustSearcher: %p\n", s, string(ID), s.mustSearcher)
+			s.currMust, err = s.mustSearcher.Advance(ctx, ID)
+			if err != nil {
+				return nil, err
+			}
+		//} else {
+		//	fmt.Printf("BOOL Advance not needed %p\n", s)
+		//}
+		fmt.Printf("BOOL Advance after %p, mustSearcher: %p, currMust: %v\n", s, s.mustSearcher, s.currMust)
 	}
 	if s.shouldSearcher != nil {
 		if s.currShould != nil {
