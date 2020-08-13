@@ -346,12 +346,14 @@ func (o *OptimizeTFRDisjunctionUnadorned) Finish() (rv index.Optimized, err erro
 			}
 		}
 
+		/*
 		// Heuristic to skip the optimization if all the constituent
 		// bitmaps are too small, where the processing & resource
 		// overhead to create the OR'ed bitmap outweighs the benefit.
 		if cMax < o.minChildCardinality {
 			return nil, nil
 		}
+		*/
 	}
 
 	// We use an artificial term and field because the optimized
